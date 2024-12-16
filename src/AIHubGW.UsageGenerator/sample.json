@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-AY7ESEEN6XcqfRCpdlPeZEhod0dYL",
+  "timestamp": "11/27/2024 7:58:37 AM",
+  "appId": "85efbe4f-359a-4ae9-b938-8e039c53b383",
+  "subscriptionId": "insomnia-test-ai",
+  "productName": "AI-HR",
+  "targetService": "chat.completion",
+  "model": "gpt-35-turbo",
+  "gatewayName": "apim-d6vjlv67krcvy.azure-api.net",
+  "gatewayRegion": "East US 2",
+  "aiGatewayId": "managed",
+  "RequestIp": "94.205.22.81",
+  "operationName": "Creates a completion for the chat message",
+  "sessionId": "NA",
+  "endUserId": "NA",
+  "backendId": "openai-backend-0",
+  "routeLocation": "eastus",
+  "routeName": "EastUS",
+  "deploymentName": "chat",
+  "promptTokens": 38,
+  "responseTokens": 156,
+  "totalTokens": 194
+}

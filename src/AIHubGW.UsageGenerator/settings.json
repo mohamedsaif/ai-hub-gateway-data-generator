@@ -1,0 +1,13 @@
+{
+  "CosmosDb": {
+    "ConnectionString": "REPLACE WITH YOUR COSMOS DB CONNECTION STRING",
+    "DatabaseName": "ai-usage-db",
+    "ContainerName": "ai-usage-container"
+  },
+  "RecordGeneration": {
+    "TotalRecords": 100,
+    "DeleteExistingData": false,
+    "StartDate": "2024-10-01T00:00:00Z",
+    "EndDate": "2024-12-31T23:59:59Z"
+  }
+}
