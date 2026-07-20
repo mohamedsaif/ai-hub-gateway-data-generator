@@ -1,13 +1,28 @@
 {
   "CosmosDb": {
-    "ConnectionString": "REPLACE WITH YOUR COSMOS DB CONNECTION STRING",
+    "ConnectionString": "REPLACE IN settings.local.json WITH YOUR COSMOS DB CONNECTION STRING",
     "DatabaseName": "ai-usage-db",
-    "ContainerName": "ai-usage-container"
+    "ContainerName": "llm-usage-container"
   },
   "RecordGeneration": {
-    "TotalRecords": 100,
+    "TotalRecords": 1000,
     "DeleteExistingData": false,
-    "StartDate": "2024-10-01T00:00:00Z",
-    "EndDate": "2024-12-31T23:59:59Z"
+    "StartDate": "2026-01-01T00:00:00Z",
+    "EndDate": "2026-08-31T23:59:59Z",
+    "ModelPricingPath": "",
+    "TokenScale": 100.0
+  },
+  "ModelPricing": {
+    "SeedPricingContainer": true,
+    "PricingContainerName": "model-pricing",
+    "PricingSourcePath": ""
+  },
+  "Output": {
+    "Target": "both",
+    "JsonlFilePath": "./generated-usage-1.jsonl"
+  },
+  "Workload": {
+    "AgentPercent": 5,
+    "McpPercent": 12
   }
 }
