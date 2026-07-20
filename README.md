@@ -34,7 +34,8 @@ Each record aligns with the current AI Hub Gateway usage document template:
 
 - **Price-aware traffic** — Models are selected with a weight inversely proportional to their blended token price, so **expensive models generate less traffic** than cheaper ones. Embeddings are weighted higher (high-volume RAG scenarios) and images lower (comparatively rare).
 - **Pricing-driven catalog** — Models are loaded from [`model-pricing-generated.json`](model-pricing-generated.json) (only `isActive` models are used). Each model is classified as `chat`, `embedding`, or `image`, with reasoning/audio capability flags.
-- **Capability-aware tokens** — Reasoning tokens are only emitted for reasoning-capable models, audio tokens only for audio-capable models, and prompt caching appears on a portion of chat calls. Token counts use right-skewed distributions (most calls small, a few large).
+- **Capability-aware tokens** — Reasoning tokens are only emitted for reasoning-capable models, and prompt caching appears on a portion of chat calls. Token counts use right-skewed distributions (most calls small, a few large).
+- **Audio-native models** — Models whose name contains `realtime` or `audio` (e.g. `gpt-realtime-1.5`) are treated as audio-capable. They emit audio tokens on the majority (~85%) of calls, with `promptAudioTokens` / `completionAudioTokens` forming a large fraction (60–95%) of the prompt/response totals.
 - **Workload mix** — Chat-capable models are routed as direct model calls, agent runs, or MCP tool invocations (configurable mix). Agent calls carry more context; MCP tool calls are smaller.
 - **Time patterns** — Timestamps are weighted toward weekday business hours, with weekends heavily reduced.
 - **Product weighting** — `Prod` products receive more traffic than `Test` and `Dev`.
@@ -80,6 +81,11 @@ Full `settings.json` template:
     "ModelPricingPath": "",
     "TokenScale": 1.0
   },
+  "ModelPricing": {
+    "SeedPricingContainer": true,
+    "PricingContainerName": "model-pricing",
+    "PricingSourcePath": ""
+  },
   "Output": {
     "Target": "cosmos",
     "JsonlFilePath": "./generated-usage.jsonl"
@@ -101,6 +107,9 @@ Full `settings.json` template:
 | `RecordGeneration.StartDate` / `EndDate` | Time window for generated timestamps. |
 | `RecordGeneration.ModelPricingPath` | Optional explicit path to the pricing file. If empty, the generator searches upward from the working directory for `model-pricing-generated.json`, and falls back to an embedded catalog if not found. |
 | `RecordGeneration.TokenScale` | Global multiplier applied to every generated token count. `1.0` = defaults; `2.0` roughly doubles tokens per record. Values `<= 0` are treated as `1.0`. |
+| `ModelPricing.SeedPricingContainer` | If `true`, upserts the model pricing catalog into its own Cosmos container before generating usage records (create-if-not-exists, update-if-exists). |
+| `ModelPricing.PricingContainerName` | Name of the pricing container (created with partition key `/model` if it does not exist). Defaults to `model-pricing`. |
+| `ModelPricing.PricingSourcePath` | Optional explicit path to the pricing source file. If empty, the generator searches upward from the working directory for `model-pricing-generated-extended.json`. |
 | `Output.Target` | Where to write records: `cosmos` (default), `jsonl` (local file only), or `both`. |
 | `Output.JsonlFilePath` | Path to the JSONL output file (created/overwritten). Used when `Target` is `jsonl` or `both`. |
 | `Workload.AgentPercent` | Percent of chat-capable calls routed as agent runs. |
@@ -116,17 +125,25 @@ Full `settings.json` template:
 
 ## Model pricing catalog
 
-The in-scope models and prices live in [`model-pricing-generated.json`](model-pricing-generated.json). To add, remove, or reprice a model, edit that file:
+The in-scope models used to drive **usage generation** live in [`model-pricing-generated.json`](model-pricing-generated.json). The **extended** catalog in [`model-pricing-generated-extended.json`](model-pricing-generated-extended.json) carries the full pricing schema (including per-modality token prices) and is the source used to seed the pricing container. To add, remove, or reprice a model, edit the relevant file:
 
 ```json
 {
-  "id": "1",
-  "model": "gpt-4.1",
-  "deploymentName": "gpt-4.1",
+  "id": "18",
+  "model": "GPT-realtime-1.5",
+  "deploymentName": "GPT-realtime-1.5",
   "isActive": true,
-  "CostPerInputUnit": 2.00,
-  "CostPerOutputUnit": 8.00,
+  "CostPerInputUnit": 4.00,
+  "CostPerOutputUnit": 16.00,
+  "CostPerCachedInputUnit": 0.40,
+  "CostPerAudioInputUnit": 32.00,
+  "CostPerCachedAudioInputUnit": 0.40,
+  "CostPerAudioOutputUnit": 64.00,
+  "CostPerReasoningOutputUnit": 0,
+  "CostPerImageInputUnit": 5.00,
+  "CostPerCachedImageInputUnit": 0.50,
   "CostUnit": 1000000,
+  "BaseCost": 0,
   "Currency": "USD",
   "CalculationMethod": "tokens",
   "region": "ALL"
@@ -134,7 +151,26 @@ The in-scope models and prices live in [`model-pricing-generated.json`](model-pr
 ```
 
 - Set `isActive` to `false` to exclude a model from generation.
-- Model category (chat / embedding / image) and reasoning capability are inferred from the model name.
+- Model category (chat / embedding / image) plus reasoning and audio capability are inferred from the model name.
+
+### Pricing schema fields
+
+The pricing schema supports per-modality token rates so cost analytics can price each token type independently:
+
+| Field | Applies to |
+| --- | --- |
+| `CostPerInputUnit` / `CostPerOutputUnit` | Text prompt / completion tokens. |
+| `CostPerCachedInputUnit` | Cached prompt tokens (discounted input). |
+| `CostPerAudioInputUnit` / `CostPerAudioOutputUnit` | Audio prompt / completion tokens. |
+| `CostPerCachedAudioInputUnit` | Cached audio prompt tokens. |
+| `CostPerReasoningOutputUnit` | Reasoning (thinking) output tokens. |
+| `CostPerImageInputUnit` / `CostPerCachedImageInputUnit` | Image input tokens (and their cached rate). |
+| `CostUnit` | The number of tokens each `CostPer*` rate applies to (e.g. `1000000`). |
+| `BaseCost` / `Currency` / `CalculationMethod` / `region` | Flat base charge, currency, cost model, and region scope. |
+
+### Model pricing container (upsert)
+
+When `ModelPricing.SeedPricingContainer` is `true`, the generator upserts every pricing entry from `model-pricing-generated-extended.json` into a dedicated container (default `model-pricing`, partition key `/model`) in the same database. The container is created if it does not exist, and each entry is updated in place if it already exists (keyed by `id` + `/model`), so re-running keeps prices current without duplicates.
 
 ## Usage
 
@@ -168,7 +204,8 @@ To wipe the container and generate a fresh dataset, set `DeleteExistingData` to 
 ## Project structure
 
 ```
-model-pricing-generated.json          # In-scope model catalog + pricing
+model-pricing-generated.json           # In-scope model catalog used for generation
+model-pricing-generated-extended.json  # Full pricing schema; source for the model-pricing container
 src/AIHubGW.UsageGenerator/
   Program.cs                          # Generator implementation
   settings.json                       # Cosmos DB + generation settings
